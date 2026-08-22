@@ -1,0 +1,10 @@
+{
+  "name": "NexaCart — Circular Marketplace",
+  "short_name": "NexaCart",
+  "description": "A considered e-commerce and circular resale marketplace.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8f7f3",
+  "theme_color": "#20221e",
+  "icons": [{ "src": "/nexacart-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

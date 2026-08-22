@@ -12,7 +12,8 @@ import { requireAdmin, requireAuth } from './middleware/auth.js';
 dotenv.config();
 
 const app = express();
-app.use(cors({ origin: /^http:\/\/localhost:(5173|5174|5175)$/ }));
+const allowedOrigins = [/^http:\/\/localhost:(5173|5174|5175)$/, process.env.CLIENT_URL].filter(Boolean);
+app.use(cors({ origin(origin, callback) { if (!origin || allowedOrigins.some(item => item instanceof RegExp ? item.test(origin) : item === origin)) return callback(null, true); return callback(new Error('Origin not allowed by CORS.')); } }));
 app.use(express.json());
 
 const catalogue = [
