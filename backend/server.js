@@ -31,38 +31,42 @@ const catalogue = [
   { id: 3, name: 'Celine Ceramic Set', category: 'Decor', price: 89, stock: 10 }
 ];
 
-// ✅ FIX 1: Proper MongoDB Connection with Timeout
-const connectMongoDB = async () => {
-  try {
-    if (!process.env.MONGODB_URI) {
-      console.warn('⚠️  MongoDB URI not configured: using catalogue demo mode');
-      return false;
-    }
+let mongoReady = false;
+let mongoConnectionPromise;
 
-    await mongoose.connect(process.env.MONGODB_URI, {
+const connectMongoDB = async () => {
+  if (mongoose.connection.readyState === 1) {
+    mongoReady = true;
+    return true;
+  }
+  if (!process.env.MONGODB_URI) {
+    console.error('MongoDB URI is missing in the deployment environment.');
+    return false;
+  }
+  if (!mongoConnectionPromise) {
+    mongoConnectionPromise = mongoose.connect(process.env.MONGODB_URI, {
       connectTimeoutMS: 10000,
-      socketTimeoutMS: 45000,
       serverSelectionTimeoutMS: 10000,
       retryWrites: true,
       w: 'majority'
+    }).then(() => {
+      mongoReady = true;
+      console.log('MongoDB connected successfully');
+      return true;
+    }).catch(error => {
+      mongoConnectionPromise = undefined;
+      mongoReady = false;
+      console.error('MongoDB connection failed:', error.message);
+      return false;
     });
-
-    console.log('✅ MongoDB connected successfully');
-    return true;
-  } catch (error) {
-    console.error('❌ MongoDB connection failed:', error.message);
-    console.error('Retrying in 5 seconds...');
-    // Retry connection after 5 seconds
-    setTimeout(connectMongoDB, 5000);
-    return false;
   }
+  return mongoConnectionPromise;
 };
 
-// ✅ FIX 2: Connect MongoDB before starting server
-let mongoReady = false;
-connectMongoDB().then(success => {
-  mongoReady = success;
-});
+const requireDatabase = async (req, res, next) => {
+  if (await connectMongoDB()) return next();
+  return res.status(503).json({ message: 'Database connection unavailable. Check API deployment logs.' });
+};
 
 const tokenFor = user => jwt.sign(
   { id: user._id, role: user.role }, 
@@ -107,12 +111,8 @@ app.get('/api/re-loved', async (_, res, next) => {
 });
 
 // ✅ FIX 3: Register endpoint with better error handling
-app.post('/api/auth/register', async (req, res, next) => {
+app.post('/api/auth/register', requireDatabase, async (req, res, next) => {
   try {
-    if (mongoose.connection.readyState !== 1) {
-      return res.status(503).json({ message: 'Database connection not ready. Please try again.' });
-    }
-
     const { name, email, password } = req.body;
 
     // Validation
@@ -150,12 +150,8 @@ app.post('/api/auth/register', async (req, res, next) => {
 });
 
 // ✅ FIX 4: Login endpoint with better error handling
-app.post('/api/auth/login', async (req, res, next) => {
+app.post('/api/auth/login', requireDatabase, async (req, res, next) => {
   try {
-    if (mongoose.connection.readyState !== 1) {
-      return res.status(503).json({ message: 'Database connection not ready. Please try again.' });
-    }
-
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -309,10 +305,9 @@ app.use((error, _, res, __) => {
 });
 
 // ✅ Start server
-const PORT = process.env.PORT || 5001;
-app.listen(PORT, () => {
-  console.log(`✅ NexaCart API is running on port ${PORT}`);
-  console.log(`📊 MongoDB status: ${mongoReady ? '✅ Connected' : '⏳ Connecting...'}`);
-});
+if (!process.env.VERCEL) {
+  const PORT = process.env.PORT || 5001;
+  app.listen(PORT, () => console.log(`NexaCart API is running on port ${PORT}`));
+}
 
 export default app;
